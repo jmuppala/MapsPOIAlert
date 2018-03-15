@@ -1,7 +1,11 @@
 package hk.ust.cse.comp4521.mapspoialert;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
+import android.app.Dialog;
 import android.app.PendingIntent;
+import android.content.ContentValues;
+import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.Geocoder;
@@ -13,8 +17,11 @@ import android.os.ResultReceiver;
 import android.support.annotation.NonNull;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
+import android.support.v4.app.DialogFragment;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -29,6 +36,7 @@ import android.net.Uri;
 import android.util.Log;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemSelectedListener;
+import android.widget.EditText;
 import android.widget.SimpleCursorAdapter;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -43,6 +51,13 @@ import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.MapFragment;
+import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 
@@ -55,7 +70,10 @@ import hk.ust.cse.comp4521.mapspoialert.provider.POIContract;
 import static android.provider.BaseColumns._ID;
 import static hk.ust.cse.comp4521.mapspoialert.provider.POIContract.POIEntry.*;
 
-public class POIAlertActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<Cursor> {
+public class POIAlertActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<Cursor>,
+        GoogleMap.OnInfoWindowClickListener,
+        OnMapReadyCallback, GoogleMap.OnMapLongClickListener,
+        GoogleMap.OnMarkerClickListener, GoogleMap.OnMarkerDragListener  {
 
     private String TAG = "POIAlertActivity";
 
@@ -156,6 +174,10 @@ public class POIAlertActivity extends AppCompatActivity implements LoaderManager
 
     TextView poiView;
 
+    private GoogleMap mMap;
+    private boolean mapReady = false;
+    private Marker meMarker = null;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
 
@@ -182,26 +204,17 @@ public class POIAlertActivity extends AppCompatActivity implements LoaderManager
 
         mGeofencingClient = LocationServices.getGeofencingClient(this);
 
-        // Create an empty adapter we will use to display the loaded data.
-        // We display the Song Title and the Artist's name in the List
+        Log.d("Maps", "After Setting up View");
 
-        mAdapter = new SimpleCursorAdapter(this,
-                android.R.layout.simple_spinner_item, null,
-                new String[]{COLUMN_POI},
-                new int[]{android.R.id.text1}, 0);
-
-        poispinner = (Spinner) findViewById(R.id.POIspinner);
-        mAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-
-        // Set the spinner to display all the pointOfInterest locations
-        poispinner.setAdapter(mAdapter);
+        // We need to ensure that we get access to the map object. We need to wait
+        // for the map object to be setup. This requires the implementation of an
+        // async callback method onMapReady() where we get the reference to the map.
+        MapFragment mapFragment = (MapFragment) getFragmentManager().findFragmentById(R.id.mapview);
+        mapFragment.getMapAsync(this);
 
         // Prepare the loader.  Either re-connect with an existing one,
         // or start a new one.
         getLoaderManager().initLoader(0, null, (LoaderCallbacks<Cursor>) this);
-
-        // set the on selected listener for the spinner
-        poispinner.setOnItemSelectedListener(new MyOnItemSelectedListener());
 
         // Build the Google API Fused Location Services client so that connections can be established
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
@@ -280,6 +293,16 @@ public class POIAlertActivity extends AppCompatActivity implements LoaderManager
 
                     mAddressRequested = true;
 
+                    if (meMarker != null)
+                        meMarker.remove();
+
+                    MarkerOptions markCur = new MarkerOptions()
+                            .position(new LatLng(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude()))
+                            .icon(BitmapDescriptorFactory.fromResource(R.drawable.pink_stick_man))
+                            .title("Me");
+
+                    meMarker = mMap.addMarker(markCur);
+
                     if (mAddressRequested) {
                         startIntentService(mCurrentLocation);
                     }
@@ -315,7 +338,6 @@ public class POIAlertActivity extends AppCompatActivity implements LoaderManager
             // and stored in the Bundle. If it was found, display the address string in the UI.
             if (savedInstanceState.keySet().contains(LOCATION_ADDRESS_KEY)) {
                 mAddressOutput = savedInstanceState.getString(LOCATION_ADDRESS_KEY);
-                displayAddressOutput();
             }
         }
     }
@@ -545,17 +567,6 @@ public class POIAlertActivity extends AppCompatActivity implements LoaderManager
         startService(intent);
     }
 
-    /**
-     * Updates the address in the UI.
-     */
-    protected void displayAddressOutput() {
-        TextView tv = (TextView) findViewById(R.id.pointOfInterest);
-
-        String message = tv.getText().toString();
-
-        tv.setText(mPOIOutput+"\n" + "\nCurrent Address: "+mAddressOutput);
-    }
-
     @Override
     public void onSaveInstanceState(Bundle savedInstanceState) {
         // Save whether the address has been requested.
@@ -582,7 +593,6 @@ public class POIAlertActivity extends AppCompatActivity implements LoaderManager
 
             // Display the address string or an error message sent from the intent service.
             mAddressOutput = resultData.getString(Constants.RESULT_DATA_KEY);
-            displayAddressOutput();
 
             // Show a toast message if an address was found.
             if (resultCode == Constants.SUCCESS_RESULT) {
@@ -594,69 +604,12 @@ public class POIAlertActivity extends AppCompatActivity implements LoaderManager
         }
     }
 
-    public class MyOnItemSelectedListener implements OnItemSelectedListener {
-
-        // This listener is responsible to deal with the user's selection from the spinner
-
-        @Override
-        public void onItemSelected(AdapterView<?> parent,
-                                   View view, int pos, long id) {
-
-            // These is the projection on the POI content provider rows that we will retrieve.
-            final String[] POIDb_POI_PROJECTION = new String[] {
-                    _ID, // unique id to identify the row
-                    COLUMN_POI, // pointOfInterest name
-                    COLUMN_LATITUDE, // latitude
-                    COLUMN_LONGITUDE, // longitude
-            };
-
-            int column_index;
-
-            Uri baseUri = ContentUris.withAppendedId(POIContract.POIProvider.CONTENT_URI, id);
-
-            String select = "((" + COLUMN_POI + " NOTNULL) AND ("
-                    + COLUMN_POI + " != '' ))";
-
-            // Get the cursor to the database row corresponding to the selected pointOfInterest
-            Cursor poiCursor = getContentResolver().query(baseUri,
-                    POIDb_POI_PROJECTION, select, null, null);
-
-            // Get the pointOfInterest's name, latitude and longitude
-            poiCursor.moveToFirst();
-            pointOfInterest = poiCursor.getString(poiCursor.getColumnIndexOrThrow(COLUMN_POI));
-            latitude = poiCursor.getDouble(poiCursor.getColumnIndexOrThrow(COLUMN_LATITUDE));
-            longitude = poiCursor.getDouble(poiCursor.getColumnIndexOrThrow(COLUMN_LONGITUDE));
-            rowID = id;
-
-            poiCursor.close();
-
-            String message = String.format(
-                    "%1$s\n Longitude: %2$s \n Latitude: %3$s",
-                    pointOfInterest, longitude, latitude
-            );
-
-            mPOIOutput = message;
-
-            TextView tv = (TextView) findViewById(R.id.pointOfInterest);
-
-            // Updates the textview on the main screen to show the selected pointOfInterest
-            tv.setText(message);
-
-            addGeoFence();
-
-        }
-
-        @Override
-        public void onNothingSelected(AdapterView<?> parent) {
-            // Do nothing.
-        }
-
-    }
-
     // These is the projection on the POI content provider rows that we will retrieve.
     static final String[] POIDb_PROJECTION = new String[] {
             _ID, // unique id to identify the row
             COLUMN_POI, // file handle
+            COLUMN_LATITUDE,
+            COLUMN_LONGITUDE
     };
 
     public Loader<Cursor> onCreateLoader(int id, Bundle args) {
@@ -684,14 +637,13 @@ public class POIAlertActivity extends AppCompatActivity implements LoaderManager
         // Swap the new cursor in.  (The framework will take care of closing the
         // old cursor once we return.)
 
-        mAdapter.swapCursor(data);
+        setUpMarkers(data);
     }
 
     public void onLoaderReset(Loader<Cursor> loader) {
         // This is called when the last Cursor provided to onLoadFinished()
         // above is about to be closed.  We need to make sure we are no
         // longer using it.
-        mAdapter.swapCursor(null);
     }
 
     @Override
@@ -745,4 +697,202 @@ public class POIAlertActivity extends AppCompatActivity implements LoaderManager
 
         return super.onOptionsItemSelected(item);
     }
+
+
+    @Override
+    public void onMapReady(GoogleMap googleMap) {
+        mMap = googleMap;
+        mapReady = true;
+        mMap.setOnInfoWindowClickListener(this);
+        mMap.setOnMapLongClickListener(this);
+        mMap.setOnMarkerClickListener(this);
+        mMap.setOnMarkerDragListener(this);
+
+    }
+
+    /**
+     * This is where we can add markers or lines, add listeners or move the camera. In this case, we
+     * just add a marker near Africa.
+     * <p>
+     * This should only be called once and when we are sure that {@link #mMap} is not null.
+     */
+    private void setUpMarkers(Cursor markerCursor) {
+
+        int column_index;
+        double latitude, longitude;
+        String poiName;
+        long id;
+
+        while (!mapReady) {}
+
+        // Move to the first row in the cursor
+        markerCursor.moveToFirst();
+
+        do{ // for all the rows in the cursor
+
+
+            // Get the poiName's name, latitude and longitude
+            id = markerCursor.getLong(markerCursor.getColumnIndexOrThrow(_ID));
+            poiName = markerCursor.getString(markerCursor.getColumnIndexOrThrow(COLUMN_POI));
+            latitude = markerCursor.getDouble(markerCursor.getColumnIndexOrThrow(COLUMN_LATITUDE));
+            longitude = markerCursor.getDouble(markerCursor.getColumnIndexOrThrow(COLUMN_LONGITUDE));
+
+            Log.i(TAG, "Marker at: "+id+poiName+latitude+longitude);
+
+            mMap.addMarker(new MarkerOptions().position(new LatLng(latitude, longitude)).title(poiName).snippet(Long.toString(id)));
+
+        } while (markerCursor.moveToNext());  // until you exhaust all the rows. returns false when we reach the end of the cursor
+
+        markerCursor.close();
+
+    }
+
+    @Override
+    public void onInfoWindowClick(Marker marker) {
+
+        mGeofencingClient.removeGeofences(getGeofencePendingIntent());
+
+        marker.setIcon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED));
+
+//        Log.i(TAG,"Marker Snippet is "+marker.getSnippet());
+//        long rowIndex = Long.valueOf(marker.getSnippet()).longValue();
+//        Log.i(TAG,"Marker Long is "+rowIndex);
+//        Uri baseUri = ContentUris.withAppendedId(POIContract.POIProvider.CONTENT_URI, rowIndex);
+//
+//        String select = "((" + COLUMN_POI + " NOTNULL) AND ("
+//                + COLUMN_POI + " != '' ))";
+//
+//        int retval = getContentResolver().delete(baseUri, select, null);
+//        Log.i(TAG, "Updated " + retval + " rows");
+
+    }
+
+    @Override
+    public boolean onMarkerClick(Marker marker) {
+
+        LatLng ll = marker.getPosition();
+
+        // Get the pointOfInterest's name, latitude and longitude
+        pointOfInterest = marker.getTitle();
+        latitude = ll.latitude;
+        longitude = ll.longitude;
+
+        String message = String.format(
+                "%1$s\n Longitude: %2$s \n Latitude: %3$s",
+                pointOfInterest, longitude, latitude
+        );
+
+        mPOIOutput = message;
+
+        Log.d(TAG, "Proximity Alert for: "+message);
+
+        Toast.makeText(getBaseContext(), "Proximity Alert for: "+message, Toast.LENGTH_LONG).show();
+
+        addGeoFence();
+
+        marker.setIcon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE));
+
+        return false;
+    }
+
+    @Override
+    public void onMarkerDragStart(Marker marker) {
+
+    }
+
+    @Override
+    public void onMarkerDrag(Marker marker) {
+
+
+    }
+
+    @Override
+    public void onMarkerDragEnd(Marker marker) {
+        marker.setDraggable(false);
+
+    }
+
+    @Override
+    public void onMapLongClick(LatLng latLng) {
+
+        Log.i(TAG, "Map clicked at Latitude " + latLng.latitude + " and Longitude " + latLng.longitude);
+
+        AddMapPOIFragment addpoiFrag = new AddMapPOIFragment(latLng);
+
+        addpoiFrag.show(getSupportFragmentManager(),"addpoi");
+
+    }
+
+    public static class AddMapPOIFragment extends DialogFragment {
+
+        String poiName;
+
+        EditText mName;
+        TextView mLat, mLong;
+
+        LatLng ll;
+
+        @SuppressLint("ValidFragment")
+        public AddMapPOIFragment(LatLng latLng) {
+            ll = latLng;
+        }
+
+        public AddMapPOIFragment() {
+
+        }
+
+        @Override
+        public Dialog onCreateDialog(Bundle savedInstanceState) {
+            // Use the Builder class for convenient dialog construction
+            AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+            builder.setTitle("Add a new Point of Interest")
+                    .setPositiveButton("Submit", new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface dialog, int id) {
+                            ContentValues initialValues = new ContentValues();
+
+                            poiName = mName.getText().toString();
+
+                            Log.i("Dialog Fragment", poiName + " " + ll.latitude + " " + ll.longitude);
+
+                            initialValues.put(POIContract.POIEntry.COLUMN_POI, poiName);
+                            initialValues.put(POIContract.POIEntry.COLUMN_LATITUDE, ll.latitude);
+                            initialValues.put(POIContract.POIEntry.COLUMN_LONGITUDE, ll.longitude);
+
+                            Uri baseUri = POIContract.POIProvider.CONTENT_URI;
+
+                            Uri newUri = getActivity().getContentResolver().insert(baseUri, initialValues);
+
+                            dialog.dismiss();
+
+                        }
+                    })
+                    .setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface dialog, int id) {
+
+                        }
+                    });
+
+            LayoutInflater inflater = getActivity().getLayoutInflater();
+
+            View view = inflater.inflate(R.layout.dialog_add_poi, null);
+
+            mName = (EditText) view.findViewById(R.id.poidiaName);
+            mLat = (TextView) view.findViewById(R.id.txtdiaLat);
+            mLong = (TextView) view.findViewById(R.id.txtdiaLong);
+
+            mLat.setText("Latitude: "+Double.toString(ll.latitude));
+            mLong.setText("Longitude: "+Double.toString(ll.longitude));
+
+            builder.setView(view);
+
+            // Create the AlertDialog object and return it
+            return builder.create();
+        }
+
+
+        @Override
+        public void onDismiss(DialogInterface dialog) {
+        }
+    }
+
 }

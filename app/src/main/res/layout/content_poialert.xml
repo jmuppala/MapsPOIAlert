@@ -8,6 +8,25 @@
     tools:context="hk.ust.cse.comp4521.mapspoialert.POIAlertActivity"
     tools:showIn="@layout/activity_poialert">
 
+    <fragment xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:map="http://schemas.android.com/apk/res-auto"
+        android:id="@+id/mapview"
+        android:name="com.google.android.gms.maps.MapFragment"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        map:cameraBearing="0"
+        map:cameraTargetLat="22.32"
+        map:cameraTargetLng="114.23"
+        map:cameraTilt="0"
+        map:cameraZoom="13"
+        map:mapType="normal"
+        map:uiCompass="true"
+        map:uiRotateGestures="true"
+        map:uiScrollGestures="true"
+        map:uiTiltGestures="false"
+        map:uiZoomControls="true"
+        map:uiZoomGestures="true" />
+
     <LinearLayout
         android:orientation="vertical"
         android:layout_width="fill_parent"
@@ -16,24 +35,10 @@
         <TextView
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dip"
-            android:textSize="12pt"
-            android:text="@string/prompt"
-            />
-        <Spinner
-            android:id="@+id/POIspinner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:drawSelectorOnTop="true"
-            android:prompt="@string/prompt"
-            />
-        <TextView
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
             android:id="@+id/pointOfInterest"
             android:textSize="10pt"
             android:layout_marginTop="10dip"
-            android:text="@string/pointOfInterest"
             />
     </LinearLayout>
 </RelativeLayout>
+

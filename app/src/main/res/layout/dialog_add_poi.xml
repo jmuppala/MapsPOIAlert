@@ -1,0 +1,44 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="fill_parent"
+    android:layout_margin="?attr/dialogPreferredPadding"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/txtdiaPOI"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="10dp"
+        android:text="@string/poiName" />
+
+    <EditText
+        android:id="@+id/poidiaName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:layout_below="@id/txtdiaPOI"
+        android:layout_margin="10dp" />
+
+    <TextView
+        android:id="@+id/txtdiaLat"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:layout_below="@id/poidiaName"
+        android:layout_margin="10dp"
+        android:text="@string/latitude" />
+
+    <TextView
+        android:id="@+id/txtdiaLong"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:layout_below="@id/txtdiaLat"
+        android:layout_margin="10dp"
+        android:text="@string/longitude" />
+
+</LinearLayout>
